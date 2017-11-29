@@ -103,3 +103,7 @@ This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
+
+## Acknowledgments
+
+* Thanks to insidetrust for their great [statistically likely usernames](https://github.com/insidetrust/statistically-likely-usernames) project which I have included in the name-lists folder
