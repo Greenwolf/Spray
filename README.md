@@ -57,6 +57,16 @@ Example: spray.sh -lync https://lyncdiscover.spiderlabs.com/ users.txt passwords
 Example: spray.sh -lync https://lyncweb.spiderlabs.com/Autodiscover/AutodiscoverService.svc/root/oauth/user users.txt passwords.txt 1 35
 ```
 
+### CISCO Web VPN
+
+To password spray a CISCO Web VPN service, a target portal or server 
+hosting a portal must be provided
+
+```
+Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>
+Example: spray.sh -ciso 192.168.0.1 usernames.txt passwords.txt 1 35
+```
+
 ### Password List Update
 
 It is also possible to update the supplied 2016/2017 
