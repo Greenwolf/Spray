@@ -12,7 +12,7 @@ All requirements come preinstalled on Kali Linux, to run on other flavors or Mac
 just make sure curl(owa & lync) and rpcclient(smb) are installed using apt-get or brew.
 
 ```
-rpclient
+rpcclient
 curl
 ```
 
