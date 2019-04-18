@@ -98,6 +98,11 @@ Example: spray.sh -genusers english-first-1000.txt english-last-1000.txt "<fn>.<
 
 * **Jacob Wilkin** - *Research and Development* - [Trustwave SpiderLabs](https://github.com/SpiderLabs)
 
+## Donation
+If this tool has been useful for you, feel free to thank me by buying me a coffee :)
+
+[![Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/Greenwolf)
+
 ## License
 
 Spray
