@@ -123,7 +123,6 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
 
     #Initial spray for same username as password
     if [ "$nouseruser" == "" ] ; then
-	echo $nouseruser
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: Users Username"
         for u in $(cat $userslist); do 
@@ -138,7 +137,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     fi
 
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while read password; do
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
     	for u in $(cat $userslist); do 
@@ -156,7 +155,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     		counter=0
     		sleep $lockoutduration
     	fi
-    done
+    done < $passwordlist
     exit 0
 fi
 
