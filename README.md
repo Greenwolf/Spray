@@ -34,6 +34,7 @@ per lockout period, lockout period length and the domain must be provided
 ```
 Useage: spray.sh -smb <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <DOMAIN>
 Example: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 SPIDERLABS
+Optionally Skip Username%Username Spray: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 SPIDERLABS skipuu
 ```
 
 ### OWA
