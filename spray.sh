@@ -122,7 +122,8 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     touch logs/spray-logs.txt
 
     #Initial spray for same username as password
-    if [ "$nousersuer" == "" ] ; then
+    if [ "$nouseruser" == "" ] ; then
+	echo $nouseruser
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: Users Username"
         for u in $(cat $userslist); do 
