@@ -168,6 +168,9 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
     postrequest=$7
     counter=0
     touch logs/spray-logs.txt
+    
+    # convert line endings on POST data; required if you C&P from Burp.
+    sed -i.bak 's/.$//' $postrequest
 
     #Initial spray for same username as password
     time=$(date +%H:%M:%S)
