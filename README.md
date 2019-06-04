@@ -97,7 +97,7 @@ Example: spray.sh -genusers english-first-1000.txt english-last-1000.txt "<fn>.<
 
 ## Authors
 
-* **Jacob Wilkin** - *Research and Development* - [Trustwave SpiderLabs](https://github.com/SpiderLabs)
+* [**Jacob Wilkin**](https://github.com/Greenwolf) - *Research and Development* - [Trustwave SpiderLabs](https://github.com/SpiderLabs)
 
 ## Donation
 If this tool has been useful for you, feel free to thank me by buying me a coffee :)
