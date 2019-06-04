@@ -123,3 +123,5 @@ GNU General Public License for more details.
 ## Acknowledgments
 
 * Thanks to insidetrust for their great [statistically likely usernames](https://github.com/insidetrust/statistically-likely-usernames) project which I have included in the name-lists folder
+* Thanks to [iditabad](https://github.com/iditabad) and [vortexau](https://github.com/vortexau) for their pull request contributions to the project.
+
