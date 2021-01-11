@@ -65,7 +65,7 @@ hosting a portal must be provided
 
 ```
 Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>
-Example: spray.sh -ciso 192.168.0.1 usernames.txt passwords.txt 1 35
+Example: spray.sh -cisco 192.168.0.1 usernames.txt passwords.txt 1 35
 ```
 
 ### Password List Update
