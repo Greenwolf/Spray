@@ -68,6 +68,15 @@ Useage: spray.sh -cisco <targetURL> <usernameList> <passwordList> <AttemptsPerLo
 Example: spray.sh -cisco 192.168.0.1 usernames.txt passwords.txt 1 35
 ```
 
+### OpenVPN Web Portal
+
+To password spray an OpenVPN web portal a target IP address and port must be provided
+
+```
+Useage: spray.sh -ovpn <targetIP> <targetPort> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes>
+Example: spray.sh -ovpn 192.168.0.1 943 usernames.txt passwords.txt 1 35
+```
+
 ### Password List Update
 
 It is also possible to update the supplied 2016/2017 
