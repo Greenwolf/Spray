@@ -8,8 +8,14 @@ These instructions will show you the requirements for and how to use Spray.
 
 ### Prerequisites
 
-All requirements come preinstalled on Kali Linux, to run on other flavors or Mac
-just make sure curl(owa & lync) and rpcclient(smb) are installed using apt-get or brew. (rpcclient is not available on macOS, and therefore smb spray will not work)
+All requirements come preinstalled on Kali Linux. To run on other flavors (including
+macOS), you need curl (owa/lync/cisco/ovpn modes) and rpcclient (smb mode).
+On macOS, rpcclient is provided by the samba formula: "brew install samba"
+On Debian/Kali, it is in samba-common-bin: "sudo apt-get install -y samba-common-bin"
+
+You can also let Spray install and check the dependencies for your OS automatically:
+
+    spray.sh --install
 
 ```
 rpcclient

